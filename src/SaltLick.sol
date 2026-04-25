@@ -14,8 +14,10 @@ import {Ownable} from "ownable/Ownable.sol";
  *      own (codeHash, mask, target). The poster of a bounty is the owner
  *      of its clone.
  *
- *      A bounty's CREATE2 deployment uses the clone's address as the
- *      deployer, so a claimant mines salts against that clone's address.
+ *      The poster supplies the `deployer` whose CREATE2 deployment will
+ *      produce the vanity address — typically the contract that will
+ *      actually deploy the bytecode (a factory, the poster's own EOA, or
+ *      any other address). Claimants mine salts against that deployer.
  *      The salt's first 20 bytes must equal `msg.sender` to prevent a
  *      mempool watcher from copying a pending salt and front-running the
  *      claim, mirroring the guard Uniswap used for the v4 PoolManager
@@ -28,12 +30,19 @@ contract SaltLick is Ownable {
     /// @notice The prototype instance used as the EIP-1167 implementation.
     SaltLick public immutable PROTO;
 
+    address public deployer;
     bytes32 public codeHash;
     uint160 public mask;
     uint160 public target;
 
     event Make(
-        SaltLick indexed clone, address indexed poster, uint256 reward, uint160 mask, uint160 target, bytes32 codeHash
+        SaltLick indexed clone,
+        address indexed poster,
+        uint256 reward,
+        address deployer,
+        uint160 mask,
+        uint160 target,
+        bytes32 codeHash
     );
     event TopUp(SaltLick indexed clone, address indexed from, uint256 amount);
     event Cancel(uint256 refund);
@@ -57,6 +66,8 @@ contract SaltLick is Ownable {
     /**
      * @notice Predict the deterministic clone address for a bounty.
      * @param poster Address that will own the bounty clone.
+     * @param deployer_ Address that will deploy the bytecode via CREATE2;
+     *                  determines the vanity address the claimant mines for.
      * @param codeHash_ keccak256 of the contract creation bytecode.
      * @param mask_ Bitmask selecting which address bits are constrained.
      * @param target_ Required values for the masked bits.
@@ -66,37 +77,42 @@ contract SaltLick is Ownable {
      * @return home The deterministic clone address.
      * @return create2Salt The CREATE2 salt used to derive `home`.
      */
-    function made(address poster, bytes32 codeHash_, uint160 mask_, uint160 target_, bytes32 salt)
+    function made(address poster, address deployer_, bytes32 codeHash_, uint160 mask_, uint160 target_, bytes32 salt)
         public
         view
         returns (bool exists, address home, bytes32 create2Salt)
     {
-        create2Salt = keccak256(abi.encode(poster, codeHash_, mask_, target_)) ^ salt;
+        create2Salt = keccak256(abi.encode(poster, deployer_, codeHash_, mask_, target_)) ^ salt;
         home = Clones.predictDeterministicAddress(address(PROTO), create2Salt, address(PROTO));
         exists = home.code.length > 0;
     }
 
     /**
      * @notice Post a new bounty (or top up an existing one) by deploying or
-     *         funding a clone keyed by `(msg.sender, codeHash, mask, target, salt)`.
+     *         funding a clone keyed by
+     *         `(msg.sender, deployer, codeHash, mask, target, salt)`.
+     * @param deployer_ Address that will deploy the bytecode via CREATE2;
+     *                  the vanity address is `keccak256(0xff, deployer_,
+     *                  salt, codeHash)[12:]`.
      * @param codeHash_ keccak256 of the contract creation bytecode the
-     *                  claimant must later supply.
+     *                  claimant mines salts against.
      * @param mask_ Bitmask selecting which address bits are constrained.
      * @param target_ Required values for the masked bits; a salt qualifies
-     *                when `(uint160(deployed) & mask) == target`.
+     *                when `(uint160(vanity) & mask) == target`.
      * @param salt User-supplied disambiguator (see {made}).
      * @return clone The bounty clone, newly deployed or already existing.
      */
-    function make(bytes32 codeHash_, uint160 mask_, uint160 target_, bytes32 salt)
+    function make(address deployer_, bytes32 codeHash_, uint160 mask_, uint160 target_, bytes32 salt)
         external
         payable
         returns (SaltLick clone)
     {
         if (msg.value == 0) revert NoReward();
         if (this != PROTO) {
-            clone = PROTO.make{value: msg.value}(codeHash_, mask_, target_, salt);
+            clone = PROTO.make{value: msg.value}(deployer_, codeHash_, mask_, target_, salt);
         } else {
-            (bool exists, address home, bytes32 create2Salt) = made(msg.sender, codeHash_, mask_, target_, salt);
+            (bool exists, address home, bytes32 create2Salt) =
+                made(msg.sender, deployer_, codeHash_, mask_, target_, salt);
             clone = SaltLick(payable(home));
             if (exists) {
                 (bool ok,) = home.call{value: msg.value}("");
@@ -104,8 +120,8 @@ contract SaltLick is Ownable {
                 emit TopUp(clone, msg.sender, msg.value);
             } else {
                 home = Clones.cloneDeterministic(address(PROTO), create2Salt, msg.value);
-                SaltLick(payable(home)).zzInit(msg.sender, codeHash_, mask_, target_);
-                emit Make(clone, msg.sender, msg.value, mask_, target_, codeHash_);
+                SaltLick(payable(home)).zzInit(msg.sender, deployer_, codeHash_, mask_, target_);
+                emit Make(clone, msg.sender, msg.value, deployer_, mask_, target_, codeHash_);
             }
         }
     }
@@ -114,9 +130,10 @@ contract SaltLick is Ownable {
      * @notice Initializer called by PROTO on a freshly deployed clone.
      * @dev Reverts with {Unauthorized} otherwise.
      */
-    function zzInit(address poster, bytes32 codeHash_, uint160 mask_, uint160 target_) public {
+    function zzInit(address poster, address deployer_, bytes32 codeHash_, uint160 mask_, uint160 target_) public {
         if (msg.sender != address(PROTO)) revert Unauthorized();
         _transferOwnership(poster);
+        deployer = deployer_;
         codeHash = codeHash_;
         mask = mask_;
         target = target_;
@@ -128,6 +145,7 @@ contract SaltLick is Ownable {
     function cancel() external onlyOwner {
         if (codeHash == bytes32(0)) revert NotPosted();
         uint256 refund = address(this).balance;
+        delete deployer;
         delete codeHash;
         delete mask;
         delete target;
@@ -155,9 +173,10 @@ contract SaltLick is Ownable {
         }
         if (claimant != msg.sender) revert InvalidSalt();
 
-        vanity = _create2Address(salt, ch);
+        vanity = _create2Address(deployer, salt, ch);
         if ((uint160(vanity) & mask) != target) revert InvalidAddress();
 
+        delete deployer;
         delete codeHash;
         delete mask;
         delete target;
@@ -176,7 +195,7 @@ contract SaltLick is Ownable {
         return address(this).balance;
     }
 
-    function _create2Address(bytes32 salt, bytes32 hash) internal view returns (address) {
-        return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, hash)))));
+    function _create2Address(address deployer_, bytes32 salt, bytes32 hash) internal pure returns (address) {
+        return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), deployer_, salt, hash)))));
     }
 }
