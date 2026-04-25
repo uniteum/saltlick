@@ -1,0 +1,90 @@
+[profile.default]
+auto_detect_solc = false
+solc = "0.8.30"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+via_ir = true
+bytecode_hash = "none"
+cbor_metadata = false
+revert-strings = "default"
+create2_deployer = "0x4e59b44847b379578588920cA78FbF26c0B4956C"
+always_use_create_2_factory = true
+src = "src"
+out = "out"
+libs = ["lib"]
+
+fs_permissions = [
+    { access = "read-write", path = "./test/" },
+    { access = "read-write", path = "./io/" }
+]
+
+[profile.default.invariant]
+runs = 256
+depth = 500
+fail_on_revert = false
+
+[profile.ci]
+invariant = { runs = 512, depth = 1000 }
+
+[profile.quick]
+invariant = { runs = 32, depth = 64 }
+
+[profile.deep]
+invariant = { runs = 1024, depth = 2000 }
+
+[rpc_endpoints]
+bitsy        = "https://rpc.bitsy.network"
+mainnet      = "https://mainnet.infura.io/v3/${INFURA_API_KEY}"       # Override for fork tests (optional)
+1            = "https://ethereum-rpc.publicnode.com"                  # Ethereum Mainnet
+11155111     = "https://ethereum-sepolia-rpc.publicnode.com"          # Ethereum Sepolia
+42161        = "https://arbitrum-one-rpc.publicnode.com"              # Arbitrum One
+421614       = "https://arbitrum-sepolia-rpc.publicnode.com"          # Arbitrum Sepolia
+8453         = "https://base-rpc.publicnode.com"                      # Base Mainnet
+84532        = "https://base-sepolia-rpc.publicnode.com"              # Base Sepolia
+10           = "https://optimism-rpc.publicnode.com"                  # Optimism Mainnet
+11155420     = "https://optimism-sepolia-rpc.publicnode.com"          # Optimism Sepolia
+137          = "https://polygon-bor-rpc.publicnode.com"               # Polygon Mainnet
+80002        = "https://polygon-amoy-rpc.publicnode.com"              # Polygon Amoy
+1101         = "https://polygon-zkevm-rpc.publicnode.com"             # Polygon zkEVM
+2442         = "https://rpc.cardona.zkevm-rpc.com"                    # Polygon zkEVM Cardona Testnet
+56           = "https://bsc-rpc.publicnode.com"                       # BNB Mainnet
+97           = "https://bsc-testnet-rpc.publicnode.com"               # BNB Testnet
+43114        = "https://avalanche-c-chain-rpc.publicnode.com"         # Avalanche C-Chain
+43113        = "https://avalanche-fuji-c-chain-rpc.publicnode.com"    # Avalanche Fuji Testnet
+324          = "https://mainnet.era.zksync.io"                        # zkSync Era Mainnet
+300          = "https://sepolia.era.zksync.dev"                       # zkSync Era Sepolia
+534352       = "https://rpc.scroll.io"                                # Scroll Mainnet
+534351       = "https://sepolia-rpc.scroll.io"                        # Scroll Sepolia
+59144        = "https://linea-rpc.publicnode.com"                     # Linea Mainnet
+59141        = "https://linea-sepolia-rpc.publicnode.com"             # Linea Sepolia
+81457        = "https://rpc.blast.io"                                 # Blast Mainnet
+168587773    = "https://sepolia.blast.io"                             # Blast Sepolia
+5000         = "https://rpc.mantle.xyz"                               # Mantle Mainnet
+5003         = "https://rpc.sepolia.mantle.xyz"                       # Mantle Sepolia
+100          = "https://gnosis-rpc.publicnode.com"                    # Gnosis Chain
+10200        = "https://rpc.chiadochain.net"                          # Gnosis Chiado Testnet
+34443        = "https://mainnet.mode.network"                         # Mode Mainnet
+919          = "https://sepolia.mode.network"                         # Mode Sepolia
+250          = "https://fantom-rpc.publicnode.com"                    # Fantom Mainnet
+4002         = "https://fantom-testnet-rpc.publicnode.com"            # Fantom Testnet
+1284         = "https://moonbeam-rpc.publicnode.com"                  # Moonbeam
+1285         = "https://moonriver-rpc.publicnode.com"                 # Moonriver
+1287         = "https://moonbase-alpha.public.blastapi.io"            # Moonbase Alpha Testnet
+42220        = "https://forno.celo.org"                               # Celo Mainnet
+44787        = "https://alfajores-forno.celo-testnet.org"             # Celo Alfajores Testnet
+25           = "https://evm.cronos.org"                               # Cronos Mainnet
+338          = "https://evm-t3.cronos.org"                            # Cronos Testnet
+13371        = "https://rpc.immutable.com"                            # Immutable zkEVM
+13473        = "https://rpc.testnet.immutable.com"                    # Immutable zkEVM Testnet
+2020         = "https://api.roninchain.com/rpc"                       # Ronin Mainnet
+2021         = "https://saigon-testnet.roninchain.com/rpc"            # Ronin Saigon Testnet
+4337         = "https://build.onbeam.com/rpc"                         # Beam Mainnet
+13337        = "https://build.onbeam.com/rpc/testnet"                 # Beam Testnet
+1088         = "https://andromeda.metis.io/?owner=1088"               # Metis Mainnet
+130          = "https://mainnet.unichain.org"                         # Unichain Mainnet
+1301         = "https://sepolia.unichain.org"                         # Unichain Testnet
+80094        = "https://rpc.berachain.com"                            # Berachain Mainnet
+80069        = "https://bepolia.rpc.berachain.com"                    # Berachain Testnet
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
