@@ -37,15 +37,13 @@ contract SaltLick is Ownable {
     );
     event TopUp(SaltLick indexed clone, address indexed from, uint256 amount);
     event Cancel(uint256 refund);
-    event Claim(address indexed claimant, address deployed, uint256 reward);
+    event Claim(address indexed claimant, address vanity, uint256 reward);
 
     error NoReward();
     error NotPosted();
     error InvalidSalt();
-    error InvalidInitCode();
     error InvalidAddress();
     error TransferFailed();
-    error DeployFailed();
     error Unauthorized();
 
     constructor(address owner_) Ownable(owner_) {
@@ -139,16 +137,15 @@ contract SaltLick is Ownable {
     }
 
     /**
-     * @notice Claim the bounty by submitting a salt and the initcode whose
-     *         CREATE2 address qualifies. The first 20 bytes of `salt` must
-     *         equal `msg.sender`, and `keccak256(initCode)` must equal the
-     *         bounty's committed codeHash. The clone deploys the contract
-     *         and forwards its full ETH balance to the caller.
+     * @notice Claim the bounty by submitting a salt whose predicted CREATE2
+     *         address qualifies under the bounty's mask/target. The first
+     *         20 bytes of `salt` must equal `msg.sender`. The clone forwards
+     *         its full ETH balance to the caller.
      * @param salt CREATE2 salt; high 20 bytes must equal `msg.sender`.
-     * @param initCode Contract creation bytecode (constructor args appended).
-     * @return deployed Address of the newly deployed contract.
+     * @return vanity The qualifying CREATE2 address derived from `salt` and
+     *                the bounty's committed codeHash.
      */
-    function claim(bytes32 salt, bytes calldata initCode) external returns (address deployed) {
+    function claim(bytes32 salt) external returns (address vanity) {
         bytes32 ch = codeHash;
         if (ch == bytes32(0)) revert NotPosted();
 
@@ -158,34 +155,18 @@ contract SaltLick is Ownable {
         }
         if (claimant != msg.sender) revert InvalidSalt();
 
-        bytes32 hash;
-        assembly ("memory-safe") {
-            let ptr := mload(0x40)
-            calldatacopy(ptr, initCode.offset, initCode.length)
-            hash := keccak256(ptr, initCode.length)
-        }
-        if (hash != ch) revert InvalidInitCode();
-
-        deployed = _create2Address(salt, hash);
-        if ((uint160(deployed) & mask) != target) revert InvalidAddress();
+        vanity = _create2Address(salt, ch);
+        if ((uint160(vanity) & mask) != target) revert InvalidAddress();
 
         delete codeHash;
         delete mask;
         delete target;
 
-        address actual;
-        assembly ("memory-safe") {
-            let ptr := mload(0x40)
-            calldatacopy(ptr, initCode.offset, initCode.length)
-            actual := create2(0, ptr, initCode.length, salt)
-        }
-        if (actual != deployed) revert DeployFailed();
-
         uint256 paid = address(this).balance;
         (bool ok,) = msg.sender.call{value: paid}("");
         if (!ok) revert TransferFailed();
 
-        emit Claim(msg.sender, deployed, paid);
+        emit Claim(msg.sender, vanity, paid);
     }
 
     /**
