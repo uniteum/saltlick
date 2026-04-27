@@ -35,32 +35,12 @@ contract SaltLick is Ownable {
     uint160 public mask;
     uint160 public target;
 
-    event Make(
-        SaltLick indexed clone,
-        address indexed poster,
-        uint256 reward,
-        address deployer,
-        uint160 mask,
-        uint160 target,
-        bytes32 codeHash
-    );
-    event TopUp(SaltLick indexed clone, address indexed from, uint256 amount);
-    event Cancel(uint256 refund);
-    event Claim(address indexed claimant, address vanity, uint256 reward);
-
-    error NoReward();
-    error NotPosted();
-    error InvalidSalt();
-    error InvalidAddress();
-    error TransferFailed();
-    error Unauthorized();
-
     constructor(address owner_) Ownable(owner_) {
         PROTO = this;
     }
 
     receive() external payable {
-        if (this == PROTO) revert();
+        emit TopUp(this, msg.sender, msg.value);
     }
 
     /**
@@ -108,7 +88,7 @@ contract SaltLick is Ownable {
         returns (SaltLick clone)
     {
         if (msg.value == 0) revert NoReward();
-        if (this != PROTO) {
+        if (address(this) != address(PROTO)) {
             clone = PROTO.make{value: msg.value}(deployer_, codeHash_, mask_, target_, salt);
         } else {
             (bool exists, address home, bytes32 create2Salt) =
@@ -116,7 +96,7 @@ contract SaltLick is Ownable {
             clone = SaltLick(payable(home));
             if (exists) {
                 (bool ok,) = home.call{value: msg.value}("");
-                if (!ok) revert TransferFailed();
+                ok;
                 emit TopUp(clone, msg.sender, msg.value);
             } else {
                 home = Clones.cloneDeterministic(address(PROTO), create2Salt, msg.value);
@@ -139,18 +119,22 @@ contract SaltLick is Ownable {
         target = target_;
     }
 
+    function _pay(address to, uint256 amount) internal {
+        (bool ok, bytes memory ret) = to.call{value: amount}("");
+        if (!ok) {
+            // Solidity has no `revert(bytes)`; bubble the recipient's revert data verbatim.
+            assembly ("memory-safe") {
+                revert(add(ret, 0x20), mload(ret))
+            }
+        }
+    }
+
     /**
      * @notice Cancel the bounty and refund the reward to the poster.
      */
-    function cancel() external onlyOwner {
-        if (codeHash == bytes32(0)) revert NotPosted();
+    function cancel() public onlyOwner {
         uint256 refund = address(this).balance;
-        delete deployer;
-        delete codeHash;
-        delete mask;
-        delete target;
-        (bool ok,) = owner().call{value: refund}("");
-        if (!ok) revert TransferFailed();
+        _pay(owner(), refund);
         emit Cancel(refund);
     }
 
@@ -167,35 +151,38 @@ contract SaltLick is Ownable {
         bytes32 ch = codeHash;
         if (ch == bytes32(0)) revert NotPosted();
 
-        address claimant;
-        assembly {
-            claimant := shr(96, salt)
-        }
-        if (claimant != msg.sender) revert InvalidSalt();
-
         vanity = _create2Address(deployer, salt, ch);
-        if ((uint160(vanity) & mask) != target) revert InvalidAddress();
+        if ((uint160(vanity) & mask) != (target & mask)) revert InvalidAddress();
 
-        delete deployer;
-        delete codeHash;
-        delete mask;
-        delete target;
+        uint256 reward = address(this).balance;
+        address claimant = address(uint160(uint256(salt) >> 96));
+        if (claimant == address(0)) claimant = msg.sender;
+        _pay(claimant, address(this).balance);
 
-        uint256 paid = address(this).balance;
-        (bool ok,) = msg.sender.call{value: paid}("");
-        if (!ok) revert TransferFailed();
-
-        emit Claim(msg.sender, vanity, paid);
-    }
-
-    /**
-     * @notice Current ETH reward held by this clone.
-     */
-    function reward() external view returns (uint256) {
-        return address(this).balance;
+        emit Claim(msg.sender, vanity, reward);
     }
 
     function _create2Address(address deployer_, bytes32 salt, bytes32 hash) internal pure returns (address) {
         return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), deployer_, salt, hash)))));
     }
+
+    event Make(
+        SaltLick indexed clone,
+        address indexed poster,
+        uint256 reward,
+        address deployer,
+        uint160 mask,
+        uint160 target,
+        bytes32 codeHash
+    );
+    event TopUp(SaltLick indexed clone, address indexed from, uint256 amount);
+    event Cancel(uint256 refund);
+    event Claim(address indexed claimant, address vanity, uint256 reward);
+
+    error NoReward();
+    error NotPosted();
+    error InvalidSalt();
+    error InvalidAddress();
+    error TransferFailed();
+    error Unauthorized();
 }
