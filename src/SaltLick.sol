@@ -157,7 +157,7 @@ contract SaltLick is Ownable {
         uint256 reward = address(this).balance;
         address claimant = address(uint160(uint256(salt) >> 96));
         if (claimant == address(0)) claimant = msg.sender;
-        _pay(claimant, address(this).balance);
+        _pay(claimant, reward);
 
         emit Claim(msg.sender, vanity, reward);
     }
