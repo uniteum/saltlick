@@ -95,8 +95,7 @@ contract SaltLick is Ownable {
                 made(msg.sender, deployer_, codeHash_, mask_, target_, salt);
             clone = SaltLick(payable(home));
             if (exists) {
-                (bool ok,) = home.call{value: msg.value}("");
-                ok;
+                _pay(home, msg.value);
                 emit TopUp(clone, msg.sender, msg.value);
             } else {
                 home = Clones.cloneDeterministic(address(PROTO), create2Salt, msg.value);
