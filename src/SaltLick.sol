@@ -30,6 +30,7 @@ contract SaltLick is Ownable {
     /// @notice The prototype instance used as the EIP-1167 implementation.
     SaltLick public immutable PROTO;
 
+    bytes32 public winningSalt;
     address public deployer;
     bytes32 public codeHash;
     uint160 public mask;
@@ -148,10 +149,10 @@ contract SaltLick is Ownable {
      *                the bounty's committed codeHash.
      */
     function claim(bytes32 salt) external returns (address vanity) {
-        bytes32 ch = codeHash;
-        if (ch == bytes32(0)) revert NotPosted();
+        if (winningSalt != bytes32(0)) revert AlreadyWon();
+        winningSalt = salt;
 
-        vanity = _create2Address(deployer, salt, ch);
+        vanity = _create2Address(deployer, salt, codeHash);
         if ((uint160(vanity) & mask) != (target & mask)) revert InvalidAddress();
 
         uint256 reward = address(this).balance;
@@ -180,7 +181,7 @@ contract SaltLick is Ownable {
     event Claim(address indexed claimant, address vanity, uint256 reward);
 
     error NoReward();
-    error NotPosted();
+    error AlreadyWon();
     error InvalidSalt();
     error InvalidAddress();
     error TransferFailed();
