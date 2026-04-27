@@ -27,7 +27,9 @@ import {Ownable} from "ownable/Ownable.sol";
  *      their bytecode on-chain ahead of deployment.
  */
 contract SaltLick is Ownable {
-    /// @notice The prototype instance used as the EIP-1167 implementation.
+    /**
+     * @notice The prototype instance used as the EIP-1167 implementation.
+     */
     SaltLick public immutable proto;
 
     bytes32 public winningSalt;
