@@ -28,7 +28,7 @@ import {Ownable} from "ownable/Ownable.sol";
  */
 contract SaltLick is Ownable {
     /// @notice The prototype instance used as the EIP-1167 implementation.
-    SaltLick public immutable PROTO;
+    SaltLick public immutable proto;
 
     bytes32 public winningSalt;
     address public deployer;
@@ -37,7 +37,7 @@ contract SaltLick is Ownable {
     uint160 public target;
 
     constructor(address owner_) Ownable(owner_) {
-        PROTO = this;
+        proto = this;
     }
 
     receive() external payable {
@@ -64,7 +64,7 @@ contract SaltLick is Ownable {
         returns (bool exists, address home, bytes32 create2Salt)
     {
         create2Salt = keccak256(abi.encode(poster, deployer_, codeHash_, mask_, target_)) ^ salt;
-        home = Clones.predictDeterministicAddress(address(PROTO), create2Salt, address(PROTO));
+        home = Clones.predictDeterministicAddress(address(proto), create2Salt, address(proto));
         exists = home.code.length > 0;
     }
 
@@ -88,8 +88,8 @@ contract SaltLick is Ownable {
         payable
         returns (SaltLick clone)
     {
-        if (address(this) != address(PROTO)) {
-            clone = PROTO.make{value: msg.value}(deployer_, codeHash_, mask_, target_, salt);
+        if (address(this) != address(proto)) {
+            clone = proto.make{value: msg.value}(deployer_, codeHash_, mask_, target_, salt);
         } else {
             (bool exists, address home, bytes32 create2Salt) =
                 made(msg.sender, deployer_, codeHash_, mask_, target_, salt);
@@ -98,7 +98,7 @@ contract SaltLick is Ownable {
                 _pay(home, msg.value);
                 emit TopUp(clone, msg.sender, msg.value);
             } else {
-                home = Clones.cloneDeterministic(address(PROTO), create2Salt, msg.value);
+                home = Clones.cloneDeterministic(address(proto), create2Salt, msg.value);
                 SaltLick(payable(home)).zzInit(msg.sender, deployer_, codeHash_, mask_, target_);
                 emit Make(clone, msg.sender, msg.value, deployer_, mask_, target_, codeHash_);
             }
@@ -106,11 +106,11 @@ contract SaltLick is Ownable {
     }
 
     /**
-     * @notice Initializer called by PROTO on a freshly deployed clone.
+     * @notice Initializer called by proto on a freshly deployed clone.
      * @dev Reverts with {Unauthorized} otherwise.
      */
     function zzInit(address poster, address deployer_, bytes32 codeHash_, uint160 mask_, uint160 target_) public {
-        if (msg.sender != address(PROTO)) revert Unauthorized();
+        if (msg.sender != address(proto)) revert Unauthorized();
         _transferOwnership(poster);
         deployer = deployer_;
         codeHash = codeHash_;

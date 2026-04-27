@@ -19,6 +19,9 @@ fs_permissions = [
     { access = "read-write", path = "./io/" }
 ]
 
+[lint]
+exclude_lints = ["screaming-snake-case-immutable", "screaming-snake-case-const"]
+
 [profile.default.invariant]
 runs = 256
 depth = 500
