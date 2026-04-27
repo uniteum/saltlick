@@ -88,7 +88,6 @@ contract SaltLick is Ownable {
         payable
         returns (SaltLick clone)
     {
-        if (msg.value == 0) revert NoReward();
         if (address(this) != address(PROTO)) {
             clone = PROTO.make{value: msg.value}(deployer_, codeHash_, mask_, target_, salt);
         } else {
@@ -153,7 +152,7 @@ contract SaltLick is Ownable {
         winningSalt = salt;
 
         vanity = _create2Address(deployer, salt, codeHash);
-        if ((uint160(vanity) & mask) != (target & mask)) revert InvalidAddress();
+        if ((uint160(vanity) & mask) != (target & mask)) revert InvalidSalt(salt);
 
         uint256 reward = address(this).balance;
         address claimant = address(uint160(uint256(salt) >> 96));
@@ -180,10 +179,7 @@ contract SaltLick is Ownable {
     event Cancel(uint256 refund);
     event Claim(address indexed claimant, address vanity, uint256 reward);
 
-    error NoReward();
     error AlreadyWon();
-    error InvalidSalt();
-    error InvalidAddress();
-    error TransferFailed();
+    error InvalidSalt(bytes32 salt);
     error Unauthorized();
 }
