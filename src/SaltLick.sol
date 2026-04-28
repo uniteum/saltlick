@@ -138,7 +138,7 @@ contract SaltLick is Ownable {
             } else {
                 home = Clones.cloneDeterministic(address(proto), create2Salt, msg.value);
                 SaltLick(payable(home)).zzInit(msg.sender, deployer_, codeHash_, mask_, target_);
-                emit Make(clone, msg.sender, msg.value, deployer_, mask_, target_, codeHash_);
+                emit Make(clone, msg.sender, msg.value, deployer_, codeHash_, mask_, target_);
             }
         }
     }
@@ -235,9 +235,9 @@ contract SaltLick is Ownable {
         address indexed poster,
         uint256 reward,
         address deployer,
+        bytes32 codeHash,
         uint160 mask,
-        uint160 target,
-        bytes32 codeHash
+        uint160 target
     );
 
     /**
