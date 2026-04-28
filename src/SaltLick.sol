@@ -18,10 +18,14 @@ import {Ownable} from "ownable/Ownable.sol";
  *      produce the vanity address — typically the contract that will
  *      actually deploy the bytecode (a factory, the poster's own EOA, or
  *      any other address). Claimants mine salts against that deployer.
- *      The salt's first 20 bytes must equal `msg.sender` to prevent a
- *      mempool watcher from copying a pending salt and front-running the
- *      claim, mirroring the guard Uniswap used for the v4 PoolManager
- *      deployment bounty.
+ *      The reward is paid to the address encoded in the salt's high 20
+ *      bytes; if those bytes are zero, payment falls back to
+ *      `msg.sender`. Claimants should bake their payout address into the
+ *      salt — this mirrors the guard Uniswap used for the v4 PoolManager
+ *      deployment bounty: a mempool watcher gains nothing from copying a
+ *      salt whose reward is locked to the original miner. A salt that
+ *      omits this encoding can be front-run by anyone who sees the
+ *      pending submission.
  *
  *      The clone stores only `codeHash`, so posters do not have to publish
  *      their bytecode on-chain ahead of deployment.
@@ -32,16 +36,48 @@ contract SaltLick is Ownable {
      */
     SaltLick public immutable proto;
 
+    /**
+     * @notice Winning salt recorded by the first successful {claim};
+     *         non-zero once the bounty has been claimed.
+     */
     bytes32 public winningSalt;
+
+    /**
+     * @notice Address whose CREATE2 deployments produce the vanity
+     *         address this bounty pays for.
+     */
     address public deployer;
+
+    /**
+     * @notice keccak256 of the contract creation bytecode the claimant
+     *         must deploy at the vanity address.
+     */
     bytes32 public codeHash;
+
+    /**
+     * @notice Bitmask selecting which bits of the candidate address are
+     *         constrained by {target}.
+     */
     uint160 public mask;
+
+    /**
+     * @notice Required values for the bits selected by {mask}; a salt
+     *         qualifies when `(uint160(vanity) & mask) == (target & mask)`.
+     */
     uint160 public target;
 
+    /**
+     * @param owner_ Owner of the prototype. The prototype owns no bounty
+     *               itself; clones reset ownership to their poster during
+     *               {zzInit}.
+     */
     constructor(address owner_) Ownable(owner_) {
         proto = this;
     }
 
+    /**
+     * @notice Accept ETH top-ups to a bounty clone and emit {TopUp}.
+     */
     receive() external payable {
         emit TopUp(this, msg.sender, msg.value);
     }
@@ -109,7 +145,13 @@ contract SaltLick is Ownable {
 
     /**
      * @notice Initializer called by proto on a freshly deployed clone.
-     * @dev Reverts with {Unauthorized} otherwise.
+     * @dev Reverts with {Unauthorized} if invoked by anyone else.
+     * @param poster Account that posted the bounty; becomes the clone's
+     *               owner.
+     * @param deployer_ See {deployer}.
+     * @param codeHash_ See {codeHash}.
+     * @param mask_ See {mask}.
+     * @param target_ See {target}.
      */
     function zzInit(address poster, address deployer_, bytes32 codeHash_, uint160 mask_, uint160 target_) public {
         if (msg.sender != address(proto)) revert Unauthorized();
@@ -120,6 +162,10 @@ contract SaltLick is Ownable {
         target = target_;
     }
 
+    /**
+     * @notice Send `amount` wei to `to`, bubbling the recipient's revert
+     *         data verbatim if the call fails.
+     */
     function _pay(address to, uint256 amount) internal {
         (bool ok, bytes memory ret) = to.call{value: amount}("");
         if (!ok) {
@@ -141,10 +187,16 @@ contract SaltLick is Ownable {
 
     /**
      * @notice Claim the bounty by submitting a salt whose predicted CREATE2
-     *         address qualifies under the bounty's mask/target. The first
-     *         20 bytes of `salt` must equal `msg.sender`. The clone forwards
-     *         its full ETH balance to the caller.
-     * @param salt CREATE2 salt; high 20 bytes must equal `msg.sender`.
+     *         address qualifies under the bounty's mask/target. The clone
+     *         forwards its full ETH balance to the address encoded in the
+     *         salt's high 20 bytes; if those bytes are zero, payment falls
+     *         back to `msg.sender`. Reverts with {AlreadyWon} if the bounty
+     *         has already been claimed, or {InvalidSalt} if `salt` does not
+     *         produce a qualifying address.
+     * @param salt CREATE2 salt. Encode the intended payout address in the
+     *             high 20 bytes to lock the reward to that address; salts
+     *             without this encoding can be front-run by anyone who sees
+     *             the pending submission.
      * @return vanity The qualifying CREATE2 address derived from `salt` and
      *                the bounty's committed codeHash.
      */
@@ -163,10 +215,18 @@ contract SaltLick is Ownable {
         emit Claim(msg.sender, vanity, reward);
     }
 
+    /**
+     * @notice Compute the CREATE2 deployment address for a given deployer,
+     *         salt, and creation-code hash.
+     */
     function _create2Address(address deployer_, bytes32 salt, bytes32 hash) internal pure returns (address) {
         return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), deployer_, salt, hash)))));
     }
 
+    /**
+     * @notice Emitted by {make} when a new bounty clone is deployed and
+     *         funded.
+     */
     event Make(
         SaltLick indexed clone,
         address indexed poster,
@@ -176,11 +236,40 @@ contract SaltLick is Ownable {
         uint160 target,
         bytes32 codeHash
     );
+
+    /**
+     * @notice Emitted when ETH is added to a bounty clone, either by
+     *         {make} on an existing bounty or via {receive}.
+     */
     event TopUp(SaltLick indexed clone, address indexed from, uint256 amount);
+
+    /**
+     * @notice Emitted when the poster cancels a bounty and withdraws the
+     *         remaining reward.
+     */
     event Cancel(uint256 refund);
+
+    /**
+     * @notice Emitted when a winning salt is accepted and the reward is
+     *         paid out. `claimant` is the submitter (`msg.sender`); the
+     *         actual recipient is the salt's high-20 encoding, falling
+     *         back to `claimant` if those bytes are zero.
+     */
     event Claim(address indexed claimant, address vanity, uint256 reward);
 
+    /**
+     * @notice Thrown by {claim} when the bounty has already been claimed.
+     */
     error AlreadyWon();
+
+    /**
+     * @notice Thrown by {claim} when `salt` does not produce an address
+     *         satisfying `(uint160(vanity) & mask) == (target & mask)`.
+     */
     error InvalidSalt(bytes32 salt);
+
+    /**
+     * @notice Thrown by {zzInit} when the caller is not the prototype.
+     */
     error Unauthorized();
 }
