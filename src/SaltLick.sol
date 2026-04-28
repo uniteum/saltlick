@@ -29,6 +29,9 @@ import {Ownable} from "ownable/Ownable.sol";
  *
  *      The clone stores only `codeHash`, so posters do not have to publish
  *      their bytecode on-chain ahead of deployment.
+ *
+ *      On {claim}, the clone pays 90% of its balance to the claimant and
+ *      10% (the vig) to the prototype's owner.
  */
 contract SaltLick is Ownable {
     /**
@@ -67,8 +70,11 @@ contract SaltLick is Ownable {
     uint160 public target;
 
     /**
+     * @notice Deploy the SaltLick prototype. This single deployment becomes
+     *         the EIP-1167 implementation for every bounty clone, and its
+     *         owner collects the 10% vig on each successful {claim}.
      * @param owner_ Owner of the prototype. The prototype owns no bounty
-     *               itself; clones reset ownership to their poster during
+     *               itself; clones reset ownership to their poster in
      *               {zzInit}.
      */
     constructor(address owner_) Ownable(owner_) {
@@ -110,6 +116,9 @@ contract SaltLick is Ownable {
      * @notice Post a new bounty (or top up an existing one) by deploying or
      *         funding a clone keyed by
      *         `(msg.sender, deployer, codeHash, mask, target, salt)`.
+     * @dev Callable on either the prototype or a clone. Calls on a clone
+     *      forward to `proto.make` with the original `msg.value` so every
+     *      bounty resolves through the same factory.
      * @param deployer_ Address that will deploy the bytecode via CREATE2;
      *                  the vanity address is `keccak256(0xff, deployer_,
      *                  salt, codeHash)[12:]`.
@@ -117,7 +126,7 @@ contract SaltLick is Ownable {
      *                  claimant mines salts against.
      * @param mask_ Bitmask selecting which address bits are constrained.
      * @param target_ Required values for the masked bits; a salt qualifies
-     *                when `(uint160(vanity) & mask) == target`.
+     *                when `(uint160(vanity) & mask) == (target & mask)`.
      * @param salt User-supplied disambiguator (see {made}).
      * @return clone The bounty clone, newly deployed or already existing.
      */
@@ -163,8 +172,8 @@ contract SaltLick is Ownable {
     }
 
     /**
-     * @notice Send `amount` wei to `to`, bubbling the recipient's revert
-     *         data verbatim if the call fails.
+     * @dev Send `amount` wei to `to`, bubbling the recipient's revert
+     *      data verbatim if the call fails.
      */
     function _pay(address to, uint256 amount) internal {
         (bool ok, bytes memory ret) = to.call{value: amount}("");
@@ -177,7 +186,11 @@ contract SaltLick is Ownable {
     }
 
     /**
-     * @notice Cancel the bounty and refund the reward to the poster.
+     * @notice Cancel the bounty and refund the remaining balance to the
+     *         poster.
+     * @dev Restricted to the clone's owner (the original poster). Does not
+     *      destroy the clone — a subsequent {make} with the same key tops
+     *      up the same address.
      */
     function cancel() public onlyOwner {
         uint256 refund = address(this).balance;
@@ -188,11 +201,15 @@ contract SaltLick is Ownable {
     /**
      * @notice Claim the bounty by submitting a salt whose predicted CREATE2
      *         address qualifies under the bounty's mask/target. The clone
-     *         forwards its full ETH balance to the address encoded in the
-     *         salt's high 20 bytes; if those bytes are zero, payment falls
-     *         back to `msg.sender`. Reverts with {AlreadyWon} if the bounty
-     *         has already been claimed, or {InvalidSalt} if `salt` does not
-     *         produce a qualifying address.
+     *         splits its ETH balance: 90% (the reward) to the address
+     *         encoded in the salt's high 20 bytes — falling back to
+     *         `msg.sender` if those bytes are zero — and 10% (the vig) to
+     *         the prototype's owner. Reverts with {AlreadyWon} if the
+     *         bounty has already been claimed, or {InvalidSalt} if `salt`
+     *         does not produce a qualifying address.
+     * @dev Setting `winningSalt` before the external payouts is the
+     *      reentrancy guard: a re-entrant {claim} hits the {AlreadyWon}
+     *      check.
      * @param salt CREATE2 salt. Encode the intended payout address in the
      *             high 20 bytes to lock the reward to that address; salts
      *             without this encoding can be front-run by anyone who sees
@@ -221,6 +238,11 @@ contract SaltLick is Ownable {
     /**
      * @notice Compute the CREATE2 deployment address for a given deployer,
      *         salt, and creation-code hash.
+     * @param deployer_ Address whose CREATE2 deployment is being predicted.
+     * @param salt CREATE2 salt supplied to that deployment.
+     * @param hash keccak256 of the contract creation bytecode.
+     * @return The address at which `deployer_` would deploy this bytecode
+     *         under `salt` via CREATE2.
      */
     function create2Address(address deployer_, bytes32 salt, bytes32 hash) public pure returns (address) {
         return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), deployer_, salt, hash)))));
@@ -256,7 +278,8 @@ contract SaltLick is Ownable {
      * @notice Emitted when a winning salt is accepted and the reward is
      *         paid out. `claimant` is the submitter (`msg.sender`); the
      *         actual recipient is the salt's high-20 encoding, falling
-     *         back to `claimant` if those bytes are zero.
+     *         back to `claimant` if those bytes are zero. `reward` is the
+     *         post-vig amount (90% of the clone's balance at claim time).
      */
     event Claim(address indexed claimant, address vanity, uint256 reward);
 
