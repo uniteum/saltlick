@@ -207,10 +207,13 @@ contract SaltLick is Ownable {
         vanity = _create2Address(deployer, salt, codeHash);
         if ((uint160(vanity) & mask) != (target & mask)) revert InvalidSalt(salt);
 
-        uint256 reward = address(this).balance;
+        uint256 payout = address(this).balance;
+        uint256 vig = payout / 10;
+        uint256 reward = payout - vig;
         address claimant = address(uint160(uint256(salt) >> 96));
         if (claimant == address(0)) claimant = msg.sender;
         _pay(claimant, reward);
+        _pay(proto.owner(), vig);
 
         emit Claim(msg.sender, vanity, reward);
     }
