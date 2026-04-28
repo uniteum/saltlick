@@ -204,7 +204,7 @@ contract SaltLick is Ownable {
         if (winningSalt != bytes32(0)) revert AlreadyWon();
         winningSalt = salt;
 
-        vanity = _create2Address(deployer, salt, codeHash);
+        vanity = create2Address(deployer, salt, codeHash);
         if ((uint160(vanity) & mask) != (target & mask)) revert InvalidSalt(salt);
 
         uint256 payout = address(this).balance;
@@ -222,7 +222,7 @@ contract SaltLick is Ownable {
      * @notice Compute the CREATE2 deployment address for a given deployer,
      *         salt, and creation-code hash.
      */
-    function _create2Address(address deployer_, bytes32 salt, bytes32 hash) internal pure returns (address) {
+    function create2Address(address deployer_, bytes32 salt, bytes32 hash) public pure returns (address) {
         return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), deployer_, salt, hash)))));
     }
 
