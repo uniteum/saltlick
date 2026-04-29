@@ -10,7 +10,7 @@ import {Ownable} from "ownable/Ownable.sol";
  *         CREATE2 salt producing a vanity address for a given bytecode.
  * @dev SaltBounty is Bitsy: a single prototype is deployed once and acts as
  *      a permissionless EIP-1167 minimal-proxy factory. Each bounty is a
- *      deterministic clone that owns its own ETH reward and stores its
+ *      deterministic clone that owns its own ETH payout and stores its
  *      own (codeHash, mask, target). The poster of a bounty is the owner
  *      of its clone.
  *
@@ -19,12 +19,12 @@ import {Ownable} from "ownable/Ownable.sol";
  *      execute the CREATE2 (a dedicated factory, an existing deployer
  *      contract, or any contract the poster controls). Claimants mine
  *      salts against that deployer.
- *      The reward is paid to the address encoded in the salt's high 20
+ *      The payout is paid to the address encoded in the salt's high 20
  *      bytes; if those bytes are zero, payment falls back to
  *      `msg.sender`. Claimants should bake their payout address into the
  *      salt — this mirrors the guard Uniswap used for the v4 PoolManager
  *      deployment bounty: a mempool watcher gains nothing from copying a
- *      salt whose reward is locked to the original miner. A salt that
+ *      salt whose payout is locked to the original miner. A salt that
  *      omits this encoding can be front-run by anyone who sees the
  *      pending submission.
  *
@@ -32,7 +32,7 @@ import {Ownable} from "ownable/Ownable.sol";
  *      their bytecode on-chain ahead of deployment.
  *
  *      On {claim}, the clone pays 90% of its balance to the claimant and
- *      10% (the vig) to the prototype's owner.
+ *      10% (the fee) to the prototype's owner.
  */
 contract SaltBounty is Ownable {
     /**
@@ -73,7 +73,7 @@ contract SaltBounty is Ownable {
     /**
      * @notice Deploy the SaltBounty prototype. This single deployment becomes
      *         the EIP-1167 implementation for every bounty clone, and its
-     *         owner collects the 10% vig on each successful {claim}.
+     *         owner collects the 10% fee on each successful {claim}.
      * @param owner_ Owner of the prototype. The prototype owns no bounty
      *               itself; clones reset ownership to their poster in
      *               {zzInit}.
@@ -202,9 +202,9 @@ contract SaltBounty is Ownable {
     /**
      * @notice Claim the bounty by submitting a salt whose predicted CREATE2
      *         address qualifies under the bounty's mask/target. The clone
-     *         splits its ETH balance: 90% (the reward) to the address
+     *         splits its ETH balance: 90% (the payout) to the address
      *         encoded in the salt's high 20 bytes — falling back to
-     *         `msg.sender` if those bytes are zero — and 10% (the vig) to
+     *         `msg.sender` if those bytes are zero — and 10% (the fee) to
      *         the prototype's owner. Reverts with {AlreadyWon} if the
      *         bounty has already been claimed, or {InvalidSalt} if `salt`
      *         does not produce a qualifying address.
@@ -212,7 +212,7 @@ contract SaltBounty is Ownable {
      *      reentrancy guard: a re-entrant {claim} hits the {AlreadyWon}
      *      check.
      * @param salt CREATE2 salt. Encode the intended payout address in the
-     *             high 20 bytes to lock the reward to that address; salts
+     *             high 20 bytes to lock the payout to that address; salts
      *             without this encoding can be front-run by anyone who sees
      *             the pending submission.
      * @return vanity The qualifying CREATE2 address derived from `salt` and
@@ -225,15 +225,15 @@ contract SaltBounty is Ownable {
         vanity = create2Address(deployer, salt, codeHash);
         if ((uint160(vanity) & mask) != (target & mask)) revert InvalidSalt(salt);
 
-        uint256 payout = address(this).balance;
-        uint256 vig = payout / 10;
-        uint256 reward = payout - vig;
+        uint256 bounty = address(this).balance;
+        uint256 fee = bounty / 10;
+        uint256 payout = bounty - fee;
         address claimant = address(uint160(uint256(salt) >> 96));
         if (claimant == address(0)) claimant = msg.sender;
-        _pay(claimant, reward);
-        _pay(proto.owner(), vig);
+        _pay(claimant, payout);
+        _pay(proto.owner(), fee);
 
-        emit Claim(msg.sender, vanity, reward);
+        emit Claim(msg.sender, vanity, payout);
     }
 
     /**
@@ -256,7 +256,7 @@ contract SaltBounty is Ownable {
     event Make(
         SaltBounty indexed clone,
         address indexed poster,
-        uint256 reward,
+        uint256 payout,
         address deployer,
         bytes32 codeHash,
         uint160 mask,
@@ -271,18 +271,18 @@ contract SaltBounty is Ownable {
 
     /**
      * @notice Emitted when the poster cancels a bounty and withdraws the
-     *         remaining reward.
+     *         remaining payout.
      */
     event Cancel(uint256 refund);
 
     /**
-     * @notice Emitted when a winning salt is accepted and the reward is
+     * @notice Emitted when a winning salt is accepted and the payout is
      *         paid out. `claimant` is the submitter (`msg.sender`); the
      *         actual recipient is the salt's high-20 encoding, falling
-     *         back to `claimant` if those bytes are zero. `reward` is the
-     *         post-vig amount (90% of the clone's balance at claim time).
+     *         back to `claimant` if those bytes are zero. `payout` is the
+     *         post-fee amount (90% of the clone's balance at claim time).
      */
-    event Claim(address indexed claimant, address vanity, uint256 reward);
+    event Claim(address indexed claimant, address vanity, uint256 payout);
 
     /**
      * @notice Thrown by {claim} when the bounty has already been claimed.

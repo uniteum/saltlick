@@ -23,7 +23,7 @@ contract SaltBountyTest is BaseTest {
     uint256 constant BOUNTY = 1 ether;
 
     SaltBounty public proto;
-    SaltBountyUser public owen; // proto owner — collects the 10% vig
+    SaltBountyUser public owen; // proto owner — collects the 10% fee
     SaltBountyUser public alex; // poster — funds the bounty
     SaltBountyUser public beck; // claimant — submits the salt
 
@@ -54,15 +54,15 @@ contract SaltBountyTest is BaseTest {
         address vanity = beck.claim(clone, salt);
 
         assertEq(vanity, expectedVanity, "vanity address");
-        assertEq(address(beck).balance - beckBefore, BOUNTY * 9 / 10, "beck reward");
-        assertEq(address(owen).balance - owenBefore, BOUNTY / 10, "owen vig");
+        assertEq(address(beck).balance - beckBefore, BOUNTY * 9 / 10, "beck payout");
+        assertEq(address(owen).balance - owenBefore, BOUNTY / 10, "owen fee");
         assertEq(address(clone).balance, 0, "clone drained");
         assertEq(clone.winningSalt(), salt, "winningSalt recorded");
     }
 
     /**
      * @notice Fixture B — salt encodes CLAIMANT in its high 20 bytes,
-     *         so the reward is paid there regardless of who calls
+     *         so the payout is paid there regardless of who calls
      *         {claim}. beck submits, but CLAIMANT gets paid.
      */
     function test_Claim_PaysBakedClaimant() public {
@@ -80,9 +80,9 @@ contract SaltBountyTest is BaseTest {
         address vanity = beck.claim(clone, salt);
 
         assertEq(vanity, expectedVanity, "vanity address");
-        assertEq(CLAIMANT.balance - claimantBefore, BOUNTY * 9 / 10, "baked claimant reward");
+        assertEq(CLAIMANT.balance - claimantBefore, BOUNTY * 9 / 10, "baked claimant payout");
         assertEq(address(beck).balance, beckBefore, "beck unpaid");
-        assertEq(address(owen).balance - owenBefore, BOUNTY / 10, "owen vig");
+        assertEq(address(owen).balance - owenBefore, BOUNTY / 10, "owen fee");
     }
 
     /**
@@ -103,7 +103,7 @@ contract SaltBountyTest is BaseTest {
 
         assertEq(vanity, expectedVanity, "vanity address");
         assertEq(uint160(vanity) & mask, target & mask, "masked bits zero");
-        assertEq(CLAIMANT.balance - claimantBefore, BOUNTY * 9 / 10, "baked claimant reward");
+        assertEq(CLAIMANT.balance - claimantBefore, BOUNTY * 9 / 10, "baked claimant payout");
     }
 
     /**
@@ -126,7 +126,7 @@ contract SaltBountyTest is BaseTest {
         assertEq(vanity, expectedVanity, "vanity address");
         assertEq(uint160(vanity) >> 144, 0x1111, "leading 1111");
         assertEq(uint160(vanity) & 0xffff, 0x1111, "trailing 1111");
-        assertEq(CLAIMANT.balance - claimantBefore, BOUNTY * 9 / 10, "baked claimant reward");
+        assertEq(CLAIMANT.balance - claimantBefore, BOUNTY * 9 / 10, "baked claimant payout");
     }
 
     /**
