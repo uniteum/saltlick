@@ -5,10 +5,10 @@ import {Clones} from "clones/Clones.sol";
 import {Ownable} from "ownable/Ownable.sol";
 
 /**
- * @title SaltLick
+ * @title SaltBounty
  * @notice On-chain escrow that pays an ETH bounty to whoever finds a
  *         CREATE2 salt producing a vanity address for a given bytecode.
- * @dev SaltLick is Bitsy: a single prototype is deployed once and acts as
+ * @dev SaltBounty is Bitsy: a single prototype is deployed once and acts as
  *      a permissionless EIP-1167 minimal-proxy factory. Each bounty is a
  *      deterministic clone that owns its own ETH reward and stores its
  *      own (codeHash, mask, target). The poster of a bounty is the owner
@@ -34,11 +34,11 @@ import {Ownable} from "ownable/Ownable.sol";
  *      On {claim}, the clone pays 90% of its balance to the claimant and
  *      10% (the vig) to the prototype's owner.
  */
-contract SaltLick is Ownable {
+contract SaltBounty is Ownable {
     /**
      * @notice The prototype instance used as the EIP-1167 implementation.
      */
-    SaltLick public immutable proto;
+    SaltBounty public immutable proto;
 
     /**
      * @notice Winning salt recorded by the first successful {claim};
@@ -71,7 +71,7 @@ contract SaltLick is Ownable {
     uint160 public target;
 
     /**
-     * @notice Deploy the SaltLick prototype. This single deployment becomes
+     * @notice Deploy the SaltBounty prototype. This single deployment becomes
      *         the EIP-1167 implementation for every bounty clone, and its
      *         owner collects the 10% vig on each successful {claim}.
      * @param owner_ Owner of the prototype. The prototype owns no bounty
@@ -134,20 +134,20 @@ contract SaltLick is Ownable {
     function make(address deployer_, bytes32 codeHash_, uint160 mask_, uint160 target_, bytes32 salt)
         external
         payable
-        returns (SaltLick clone)
+        returns (SaltBounty clone)
     {
         if (address(this) != address(proto)) {
             clone = proto.make{value: msg.value}(deployer_, codeHash_, mask_, target_, salt);
         } else {
             (bool exists, address home, bytes32 create2Salt) =
                 made(msg.sender, deployer_, codeHash_, mask_, target_, salt);
-            clone = SaltLick(payable(home));
+            clone = SaltBounty(payable(home));
             if (exists) {
                 _pay(home, msg.value);
                 emit TopUp(clone, msg.sender, msg.value);
             } else {
                 home = Clones.cloneDeterministic(address(proto), create2Salt, msg.value);
-                SaltLick(payable(home)).zzInit(msg.sender, deployer_, codeHash_, mask_, target_);
+                SaltBounty(payable(home)).zzInit(msg.sender, deployer_, codeHash_, mask_, target_);
                 emit Make(clone, msg.sender, msg.value, deployer_, codeHash_, mask_, target_);
             }
         }
@@ -254,7 +254,7 @@ contract SaltLick is Ownable {
      *         funded.
      */
     event Make(
-        SaltLick indexed clone,
+        SaltBounty indexed clone,
         address indexed poster,
         uint256 reward,
         address deployer,
@@ -267,7 +267,7 @@ contract SaltLick is Ownable {
      * @notice Emitted when ETH is added to a bounty clone, either by
      *         {make} on an existing bounty or via {receive}.
      */
-    event TopUp(SaltLick indexed clone, address indexed from, uint256 amount);
+    event TopUp(SaltBounty indexed clone, address indexed from, uint256 amount);
 
     /**
      * @notice Emitted when the poster cancels a bounty and withdraws the

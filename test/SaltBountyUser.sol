@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Uniteum
 pragma solidity ^0.8.30;
 
-import {SaltLick} from "../src/SaltLick.sol";
+import {SaltBounty} from "../src/SaltBounty.sol";
 import {Test, console} from "forge-std/Test.sol";
 
-contract SaltLickUser is Test {
+contract SaltBountyUser is Test {
     string public name;
 
     constructor(string memory name_) {
@@ -17,24 +17,24 @@ contract SaltLickUser is Test {
     }
 
     function make(
-        SaltLick proto,
+        SaltBounty proto,
         address deployer,
         bytes32 codeHash,
         uint160 mask,
         uint160 target,
         bytes32 salt,
         uint256 reward
-    ) public returns (SaltLick clone) {
+    ) public returns (SaltBounty clone) {
         console.log("%s make %s wei", name, reward);
         clone = proto.make{value: reward}(deployer, codeHash, mask, target, salt);
     }
 
-    function claim(SaltLick clone, bytes32 salt) public returns (address vanity) {
+    function claim(SaltBounty clone, bytes32 salt) public returns (address vanity) {
         console.log("%s claim", name);
         vanity = clone.claim(salt);
     }
 
-    function cancel(SaltLick clone) public {
+    function cancel(SaltBounty clone) public {
         console.log("%s cancel", name);
         clone.cancel();
     }
