@@ -107,6 +107,29 @@ contract SaltLickTest is BaseTest {
     }
 
     /**
+     * @notice Fixture D — vanity has four leading and four trailing `1`
+     *         nibbles. Mask covers the high and low 16 bits of the
+     *         address; target encodes `0x1111` in both. Mined against
+     *         the Arachnid CREATE2 deployer in ~32s.
+     */
+    function test_Claim_LeadingAndTrailingOnes() public {
+        uint160 mask = uint160(0xffff) << 144 | uint160(0xffff);
+        uint160 target = uint160(0x1111) << 144 | uint160(0x1111);
+        bytes32 salt = 0xE396da99091B535B65384914B178b9264c7426da0000000000000000822af95a;
+        address expectedVanity = 0x1111BDaf47b4EcB87BE478743093a3639dA11111;
+
+        SaltLick clone = alex.make(proto, DEPLOYER, CODE_HASH, mask, target, bytes32(0), BOUNTY);
+
+        uint256 claimantBefore = CLAIMANT.balance;
+        address vanity = beck.claim(clone, salt);
+
+        assertEq(vanity, expectedVanity, "vanity address");
+        assertEq(uint160(vanity) >> 144, 0x1111, "leading 1111");
+        assertEq(uint160(vanity) & 0xffff, 0x1111, "trailing 1111");
+        assertEq(CLAIMANT.balance - claimantBefore, BOUNTY * 9 / 10, "baked claimant reward");
+    }
+
+    /**
      * @notice Perturb fixture C's salt by 1 — the resulting vanity no
      *         longer satisfies (mask, target), so {claim} reverts with
      *         {InvalidSalt}.
