@@ -113,8 +113,8 @@ contract SaltLickTest is BaseTest {
      *         the Arachnid CREATE2 deployer in ~32s.
      */
     function test_Claim_LeadingAndTrailingOnes() public {
-        uint160 mask = uint160(0xffff) << 144 | uint160(0xffff);
-        uint160 target = uint160(0x1111) << 144 | uint160(0x1111);
+        uint160 mask = uint160(0x1111000000000000000000000000000000001111);
+        uint160 target = uint160(0x1111111111111111111111111111111111111111);
         bytes32 salt = 0xE396da99091B535B65384914B178b9264c7426da0000000000000000822af95a;
         address expectedVanity = 0x1111BDaf47b4EcB87BE478743093a3639dA11111;
 
