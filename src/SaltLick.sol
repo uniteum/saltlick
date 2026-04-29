@@ -15,9 +15,10 @@ import {Ownable} from "ownable/Ownable.sol";
  *      of its clone.
  *
  *      The poster supplies the `deployer` whose CREATE2 deployment will
- *      produce the vanity address — typically the contract that will
- *      actually deploy the bytecode (a factory, the poster's own EOA, or
- *      any other address). Claimants mine salts against that deployer.
+ *      produce the vanity address — the contract that will actually
+ *      execute the CREATE2 (a dedicated factory, an existing deployer
+ *      contract, or any contract the poster controls). Claimants mine
+ *      salts against that deployer.
  *      The reward is paid to the address encoded in the salt's high 20
  *      bytes; if those bytes are zero, payment falls back to
  *      `msg.sender`. Claimants should bake their payout address into the
