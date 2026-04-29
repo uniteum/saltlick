@@ -11,7 +11,7 @@ import {Ownable} from "ownable/Ownable.sol";
  * @dev SaltBounty is Bitsy: a single prototype is deployed once and acts as
  *      a permissionless EIP-1167 minimal-proxy factory. Each bounty is a
  *      deterministic clone that owns its own ETH payout and stores its
- *      own (codeHash, mask, target). The poster of a bounty is the owner
+ *      own (initCodeHash, mask, target). The poster of a bounty is the owner
  *      of its clone.
  *
  *      The poster supplies the `deployer` whose CREATE2 deployment will
@@ -28,7 +28,7 @@ import {Ownable} from "ownable/Ownable.sol";
  *      omits this encoding can be front-run by anyone who sees the
  *      pending submission.
  *
- *      The clone stores only `codeHash`, so posters do not have to publish
+ *      The clone stores only `initCodeHash`, so posters do not have to publish
  *      their bytecode on-chain ahead of deployment.
  *
  *      On {claim}, the clone pays 90% of its balance to the claimant and
@@ -56,7 +56,7 @@ contract SaltBounty is Ownable {
      * @notice keccak256 of the contract creation bytecode the claimant
      *         must deploy at the vanity address.
      */
-    bytes32 public codeHash;
+    bytes32 public initCodeHash;
 
     /**
      * @notice Bitmask selecting which bits of the candidate address are
@@ -94,7 +94,7 @@ contract SaltBounty is Ownable {
      * @param poster Address that will own the bounty clone.
      * @param deployer_ Address that will deploy the bytecode via CREATE2;
      *                  determines the vanity address the claimant mines for.
-     * @param codeHash_ keccak256 of the contract creation bytecode.
+     * @param initCodeHash_ keccak256 of the contract creation bytecode.
      * @param mask_ Bitmask selecting which address bits are constrained.
      * @param target_ Required values for the masked bits.
      * @param salt User-supplied disambiguator allowing the same poster to
@@ -103,12 +103,15 @@ contract SaltBounty is Ownable {
      * @return home The deterministic clone address.
      * @return create2Salt The CREATE2 salt used to derive `home`.
      */
-    function made(address poster, address deployer_, bytes32 codeHash_, uint160 mask_, uint160 target_, bytes32 salt)
-        public
-        view
-        returns (bool exists, address home, bytes32 create2Salt)
-    {
-        create2Salt = keccak256(abi.encode(poster, deployer_, codeHash_, mask_, target_)) ^ salt;
+    function made(
+        address poster,
+        address deployer_,
+        bytes32 initCodeHash_,
+        uint160 mask_,
+        uint160 target_,
+        bytes32 salt
+    ) public view returns (bool exists, address home, bytes32 create2Salt) {
+        create2Salt = keccak256(abi.encode(poster, deployer_, initCodeHash_, mask_, target_)) ^ salt;
         home = Clones.predictDeterministicAddress(address(proto), create2Salt, address(proto));
         exists = home.code.length > 0;
     }
@@ -116,14 +119,14 @@ contract SaltBounty is Ownable {
     /**
      * @notice Post a new bounty (or top up an existing one) by deploying or
      *         funding a clone keyed by
-     *         `(msg.sender, deployer, codeHash, mask, target, salt)`.
+     *         `(msg.sender, deployer, initCodeHash, mask, target, salt)`.
      * @dev Callable on either the prototype or a clone. Calls on a clone
      *      forward to `proto.make` with the original `msg.value` so every
      *      bounty resolves through the same factory.
      * @param deployer_ Address that will deploy the bytecode via CREATE2;
      *                  the vanity address is `keccak256(0xff, deployer_,
-     *                  salt, codeHash)[12:]`.
-     * @param codeHash_ keccak256 of the contract creation bytecode the
+     *                  salt, initCodeHash)[12:]`.
+     * @param initCodeHash_ keccak256 of the contract creation bytecode the
      *                  claimant mines salts against.
      * @param mask_ Bitmask selecting which address bits are constrained.
      * @param target_ Required values for the masked bits; a salt qualifies
@@ -131,24 +134,24 @@ contract SaltBounty is Ownable {
      * @param salt User-supplied disambiguator (see {made}).
      * @return clone The bounty clone, newly deployed or already existing.
      */
-    function make(address deployer_, bytes32 codeHash_, uint160 mask_, uint160 target_, bytes32 salt)
+    function make(address deployer_, bytes32 initCodeHash_, uint160 mask_, uint160 target_, bytes32 salt)
         external
         payable
         returns (SaltBounty clone)
     {
         if (address(this) != address(proto)) {
-            clone = proto.make{value: msg.value}(deployer_, codeHash_, mask_, target_, salt);
+            clone = proto.make{value: msg.value}(deployer_, initCodeHash_, mask_, target_, salt);
         } else {
             (bool exists, address home, bytes32 create2Salt) =
-                made(msg.sender, deployer_, codeHash_, mask_, target_, salt);
+                made(msg.sender, deployer_, initCodeHash_, mask_, target_, salt);
             clone = SaltBounty(payable(home));
             if (exists) {
                 _pay(home, msg.value);
                 emit TopUp(clone, msg.sender, msg.value);
             } else {
                 home = Clones.cloneDeterministic(address(proto), create2Salt, msg.value);
-                SaltBounty(payable(home)).zzInit(msg.sender, deployer_, codeHash_, mask_, target_);
-                emit Make(clone, msg.sender, msg.value, deployer_, codeHash_, mask_, target_);
+                SaltBounty(payable(home)).zzInit(msg.sender, deployer_, initCodeHash_, mask_, target_);
+                emit Make(clone, msg.sender, msg.value, deployer_, initCodeHash_, mask_, target_);
             }
         }
     }
@@ -159,15 +162,15 @@ contract SaltBounty is Ownable {
      * @param poster Account that posted the bounty; becomes the clone's
      *               owner.
      * @param deployer_ See {deployer}.
-     * @param codeHash_ See {codeHash}.
+     * @param initCodeHash_ See {initCodeHash}.
      * @param mask_ See {mask}.
      * @param target_ See {target}.
      */
-    function zzInit(address poster, address deployer_, bytes32 codeHash_, uint160 mask_, uint160 target_) public {
+    function zzInit(address poster, address deployer_, bytes32 initCodeHash_, uint160 mask_, uint160 target_) public {
         if (msg.sender != address(proto)) revert Unauthorized();
         _transferOwnership(poster);
         deployer = deployer_;
-        codeHash = codeHash_;
+        initCodeHash = initCodeHash_;
         mask = mask_;
         target = target_;
     }
@@ -216,13 +219,13 @@ contract SaltBounty is Ownable {
      *             without this encoding can be front-run by anyone who sees
      *             the pending submission.
      * @return vanity The qualifying CREATE2 address derived from `salt` and
-     *                the bounty's committed codeHash.
+     *                the bounty's committed initCodeHash.
      */
     function claim(bytes32 salt) external returns (address vanity) {
         if (winningSalt != bytes32(0)) revert AlreadyWon();
         winningSalt = salt;
 
-        vanity = create2Address(deployer, salt, codeHash);
+        vanity = create2Address(deployer, salt, initCodeHash);
         if ((uint160(vanity) & mask) != (target & mask)) revert InvalidSalt(salt);
 
         uint256 bounty = address(this).balance;
@@ -238,15 +241,15 @@ contract SaltBounty is Ownable {
 
     /**
      * @notice Compute the CREATE2 deployment address for a given deployer,
-     *         salt, and creation-code hash.
+     *         salt, and init-code hash.
      * @param deployer_ Address whose CREATE2 deployment is being predicted.
      * @param salt CREATE2 salt supplied to that deployment.
-     * @param hash keccak256 of the contract creation bytecode.
+     * @param initCodeHash_ keccak256 of the contract creation bytecode.
      * @return The address at which `deployer_` would deploy this bytecode
      *         under `salt` via CREATE2.
      */
-    function create2Address(address deployer_, bytes32 salt, bytes32 hash) public pure returns (address) {
-        return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), deployer_, salt, hash)))));
+    function create2Address(address deployer_, bytes32 salt, bytes32 initCodeHash_) public pure returns (address) {
+        return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), deployer_, salt, initCodeHash_)))));
     }
 
     /**
@@ -258,7 +261,7 @@ contract SaltBounty is Ownable {
         address indexed poster,
         uint256 payout,
         address deployer,
-        bytes32 codeHash,
+        bytes32 initCodeHash,
         uint160 mask,
         uint160 target
     );

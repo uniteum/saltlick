@@ -12,13 +12,13 @@ import {BaseTest} from "crucible/test/Base.t.sol";
  *
  *         Fixture parameters common to all tests:
  *           deployer = 0x4e59…4956C  (Arachnid CREATE2 deployer)
- *           codeHash = keccak256("")
+ *           initCodeHash = keccak256("")
  *           claimant = 0xE396…26da   (encoded into salt's high 20 bytes
  *                                     for fixtures B and C)
  */
 contract SaltBountyTest is BaseTest {
     address constant DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
-    bytes32 constant CODE_HASH = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
+    bytes32 constant INIT_CODE_HASH = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
     address constant CLAIMANT = 0xE396da99091B535B65384914B178b9264c7426da;
     uint256 constant BOUNTY = 1 ether;
 
@@ -46,7 +46,7 @@ contract SaltBountyTest is BaseTest {
         bytes32 salt = bytes32(uint256(0x15));
         address expectedVanity = 0xcB33dBA50bb85F96eBD683a40b118825A6B85200;
 
-        SaltBounty clone = alex.make(proto, DEPLOYER, CODE_HASH, mask, target, bytes32(0), BOUNTY);
+        SaltBounty clone = alex.make(proto, DEPLOYER, INIT_CODE_HASH, mask, target, bytes32(0), BOUNTY);
 
         uint256 beckBefore = address(beck).balance;
         uint256 owenBefore = address(owen).balance;
@@ -71,7 +71,7 @@ contract SaltBountyTest is BaseTest {
         bytes32 salt = 0xE396da99091B535B65384914B178b9264c7426da000000000000000000000b5e;
         address expectedVanity = 0xF7674Af795Bdf7fB7f15559da59a2190d24f3E00;
 
-        SaltBounty clone = alex.make(proto, DEPLOYER, CODE_HASH, mask, target, bytes32(0), BOUNTY);
+        SaltBounty clone = alex.make(proto, DEPLOYER, INIT_CODE_HASH, mask, target, bytes32(0), BOUNTY);
 
         uint256 claimantBefore = CLAIMANT.balance;
         uint256 beckBefore = address(beck).balance;
@@ -96,7 +96,7 @@ contract SaltBountyTest is BaseTest {
         bytes32 salt = 0xE396da99091B535B65384914B178b9264c7426da000000000000000000001324;
         address expectedVanity = 0x1568e1B729B83948B920034611C5cdF310A90000;
 
-        SaltBounty clone = alex.make(proto, DEPLOYER, CODE_HASH, mask, target, bytes32(0), BOUNTY);
+        SaltBounty clone = alex.make(proto, DEPLOYER, INIT_CODE_HASH, mask, target, bytes32(0), BOUNTY);
 
         uint256 claimantBefore = CLAIMANT.balance;
         address vanity = beck.claim(clone, salt);
@@ -118,7 +118,7 @@ contract SaltBountyTest is BaseTest {
         bytes32 salt = 0xE396da99091B535B65384914B178b9264c7426da0000000000000000822af95a;
         address expectedVanity = 0x1111BDaf47b4EcB87BE478743093a3639dA11111;
 
-        SaltBounty clone = alex.make(proto, DEPLOYER, CODE_HASH, mask, target, bytes32(0), BOUNTY);
+        SaltBounty clone = alex.make(proto, DEPLOYER, INIT_CODE_HASH, mask, target, bytes32(0), BOUNTY);
 
         uint256 claimantBefore = CLAIMANT.balance;
         address vanity = beck.claim(clone, salt);
@@ -140,7 +140,7 @@ contract SaltBountyTest is BaseTest {
         bytes32 validSalt = 0xE396da99091B535B65384914B178b9264c7426da000000000000000000001324;
         bytes32 badSalt = bytes32(uint256(validSalt) + 1);
 
-        SaltBounty clone = alex.make(proto, DEPLOYER, CODE_HASH, mask, target, bytes32(0), BOUNTY);
+        SaltBounty clone = alex.make(proto, DEPLOYER, INIT_CODE_HASH, mask, target, bytes32(0), BOUNTY);
 
         vm.expectRevert(abi.encodeWithSelector(SaltBounty.InvalidSalt.selector, badSalt));
         beck.claim(clone, badSalt);
@@ -156,7 +156,7 @@ contract SaltBountyTest is BaseTest {
         uint160 target = 0;
         bytes32 salt = bytes32(uint256(0x15));
 
-        SaltBounty clone = alex.make(proto, DEPLOYER, CODE_HASH, mask, target, bytes32(0), BOUNTY);
+        SaltBounty clone = alex.make(proto, DEPLOYER, INIT_CODE_HASH, mask, target, bytes32(0), BOUNTY);
         beck.claim(clone, salt);
 
         vm.expectRevert(SaltBounty.AlreadyWon.selector);

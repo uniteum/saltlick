@@ -19,14 +19,14 @@ contract SaltBountyUser is Test {
     function make(
         SaltBounty proto,
         address deployer,
-        bytes32 codeHash,
+        bytes32 initCodeHash,
         uint160 mask,
         uint160 target,
         bytes32 salt,
         uint256 payout
     ) public returns (SaltBounty clone) {
         console.log("%s make %s wei", name, payout);
-        clone = proto.make{value: payout}(deployer, codeHash, mask, target, salt);
+        clone = proto.make{value: payout}(deployer, initCodeHash, mask, target, salt);
     }
 
     function claim(SaltBounty clone, bytes32 salt) public returns (address vanity) {
