@@ -110,7 +110,7 @@ contract SaltLickTest is BaseTest {
      * @notice Fixture D — vanity has four leading and four trailing `1`
      *         nibbles. Mask covers the high and low 16 bits of the
      *         address; target encodes `0x1111` in both. Mined against
-     *         the Arachnid CREATE2 deployer in ~32s.
+     *         the Arachnid CREATE2 deployer in ~32s on an Intel iGPU.
      */
     function test_Claim_LeadingAndTrailingOnes() public {
         uint160 mask = uint160(0x1111000000000000000000000000000000001111);
